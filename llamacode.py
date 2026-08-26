@@ -223,15 +223,18 @@ class Receipt(BaseModel):
         description=("Explain briefly if anything important is unclear or ambiguous. Otherwise return null.")
     )
 
+
 def check_output_file():
     if not OUTPUT_FILE.exists():
         raise SystemExit(f"\nCould not find:\n{OUTPUT_FILE}\n\nMake sure Expense_Claim_filled.xlsx is in the same folder as this Python script.")
+
 
 def check_files():
     check_output_file()
     if not RECEIPTS_FOLDER.exists():
         RECEIPTS_FOLDER.mkdir()
         raise SystemExit(f"\nCreated receipts folder:\n{RECEIPTS_FOLDER}\n\nPut receipt images inside it and run the script again.")
+
 
 def get_receipt_files():
     files = sorted(
@@ -240,11 +243,11 @@ def get_receipt_files():
     )
     if not files:
         raise SystemExit("\nNo receipt files found in the receipts folder.")
-    
     max_receipts = LAST_DATA_ROW - FIRST_DATA_ROW + 1
     if len(files) > max_receipts:
         raise SystemExit(f"\nFound {len(files)} receipts but the form only supports {max_receipts} receipts.")
     return files
+
 
 def get_agent():
     # Only require the API key when actually processing receipts.
@@ -265,6 +268,7 @@ def get_agent():
             data_schema=Receipt
         )
 
+
 def normalise_category(category):
     if not category:
         return "/"
@@ -278,6 +282,7 @@ def normalise_category(category):
             return allowed
     # Do NOT invent another category.
     return "/"
+
 
 def extract_receipts(files):
     agent = get_agent()
@@ -306,6 +311,7 @@ def extract_receipts(files):
     if not extracted:
         raise SystemExit("\nNo receipts were successfully extracted.")
     return extracted
+
 
 def wrap_description(ws, row, description):
     """
@@ -466,6 +472,7 @@ def clear_existing_entries(ws):
 
 # AUTOMATED RESET
 
+
 def reset_expense_claim():
     """
     Return Expense_Claim_filled.xlsx to its clean reusable state.
@@ -533,6 +540,7 @@ def reset_expense_claim():
 # ======================================================================
 # FILL FORM
 # ======================================================================
+
 
 def fill_form(extracted):
     wb = load_workbook(OUTPUT_FILE)
@@ -620,6 +628,7 @@ def fill_form(extracted):
 # ======================================================================
 # MAIN MENU
 # ======================================================================
+
 
 def main_menu():
     print("\n========================================")
