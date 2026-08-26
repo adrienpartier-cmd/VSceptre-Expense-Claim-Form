@@ -211,23 +211,16 @@ class Receipt(BaseModel):
         )
     )
     total_hkd: float = Field(
-        description=(
-            "Final amount paid as printed on the receipt. "
-            "Do not perform currency conversion."
-        )
+        description=("Final amount paid as printed on the receipt. Do not perform currency conversion.")
     )
     currency: str = Field(
-        description=(
-            "Three-letter currency code, for example HKD, USD, GBP or TWD."
-        )
+        description=("Three-letter currency code, for example HKD, USD, GBP or TWD.")
     )
     category: str = Field(description=CATEGORY_PROMPT)
+
     confidence_note: Optional[str] = Field(
         default=None,
-        description=(
-            "Explain briefly if anything important is unclear or ambiguous. "
-            "Otherwise return null."
-        )
+        description=("Explain briefly if anything important is unclear or ambiguous. Otherwise return null.")
     )
 
 def check_output_file():
@@ -242,19 +235,12 @@ def check_files():
 
 def get_receipt_files():
     files = sorted(
-        file
-        for file in RECEIPTS_FOLDER.iterdir()
-        if file.suffix.lower() in (
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".pdf",
-        )
+        file for file in RECEIPTS_FOLDER.iterdir()
+        if file.suffix.lower() in (".jpg", ".jpeg", ".png", ".pdf",)
     )
     if not files:
-        raise SystemExit(
-            "\nNo receipt files found in the receipts folder."
-        )
+        raise SystemExit("\nNo receipt files found in the receipts folder.")
+    
     max_receipts = LAST_DATA_ROW - FIRST_DATA_ROW + 1
     if len(files) > max_receipts:
         raise SystemExit(f"\nFound {len(files)} receipts but the form only supports {max_receipts} receipts.")
