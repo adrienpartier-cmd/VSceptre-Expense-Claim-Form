@@ -316,7 +316,7 @@ def get_agent():
     if not API_KEY:
         raise SystemExit(
             "\nMissing LLAMA_CLOUD_API_KEY.\n\n"
-            "Your .env file should contain:\n\n"
+            "Your API_KEY.txt file should contain:\n\n"
             "LLAMA_CLOUD_API_KEY=llx-your-real-key\n"
         )
 
@@ -2551,8 +2551,9 @@ def main_menu():
         reset_expense_claim()
 
     elif choice == "3":
-        print(
-            "\nExited Expense Claim Tool.\n"
+
+        input(
+            "\nPress Enter to exit...\n"
         )
 
     else:
