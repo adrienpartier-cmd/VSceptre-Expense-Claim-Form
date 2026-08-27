@@ -2,3 +2,4 @@ __pycache__/
 .venv/
 venv
 API_KEY.txt
+Expense_Claim_filled.xlsx
