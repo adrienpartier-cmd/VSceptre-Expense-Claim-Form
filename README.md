@@ -1,16 +1,19 @@
 # Expense Claim Form Generator
 
-Scan receipts and turn them into expense claim forms
+Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 
 ## Install instructions
 
 ### For regular users: Download release
 
-download the corresponding zip file from the releases page
+> [!NOTE]
+> Please find Merton for tech support if any of this doesn't work, or if I have already left, the IT department can probably help you
 
-foo bar
+1. Download the corresponding zip file from the releases page. Depending on your operating system you will need to download a different file.
 
-not completed
+2. Extract the file, there should be a new folder named ExpenseClaimForm-[OS_TYPE]
+
+3. Go into that folder and click the executable file named ExpenseClaimForm, again depending on your OS it may have a different file extension
 
 > [!IMPORTANT]
 > Windows Defender or whatever antivirus you use will probably mark this as suspicious/malware. This is because the way we used to package the application (pyinstaller) is also commonly used to package malicious programs. Please be assured that we are not interested in hacking anyone. Just tell Windows Defender to ignore it.
@@ -54,3 +57,6 @@ not completed
    pip install pyinstaller
    pyinstaller -Fn ExpenseClaimForm llamacode.py
    ```
+## Legal notices
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for included library licenses and source links.
