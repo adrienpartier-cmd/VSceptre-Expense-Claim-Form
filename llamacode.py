@@ -53,7 +53,7 @@ CATEGORY_COLUMN = "G"
 AMOUNT_COLUMN = "H"
 AMOUNT_END_COLUMN = "I"
 
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / "API_KEY.txt")
 API_KEY = os.getenv("LLAMA_CLOUD_API_KEY")
 
 ALLOWED_CATEGORIES = [
