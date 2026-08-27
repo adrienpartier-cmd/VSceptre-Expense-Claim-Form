@@ -1,3 +1,7 @@
+# Licensing Notice
+
+All the original code in this application is licensed under the MIT License, which is provided in [LICENSE.md](LICENSE.md). at  Some third party libraries may be licensed differently, see below:
+
 # Third-Party Notices
 
 Expense Claim Form Generator includes or uses the third-party software listed below.
