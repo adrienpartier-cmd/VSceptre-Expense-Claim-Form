@@ -21,6 +21,7 @@ not completed
    ```
 
 2. Make a virtual environment
+
    Windows:
    ```
    python3.14 -m venv venv
