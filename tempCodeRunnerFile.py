@@ -1,1 +1,0 @@
-# python -c "import openpyxl; f='Expense_Claim_filled.xlsx'; wb=openpyxl.load_workbook(f); ws=wb['Form']; [(setattr(ws[f'{c}{r}'],'value',None)) for r in range(7,27) for c in 'BCDEFGH']; wb.save(f); print('Cleared B7:H26')"
