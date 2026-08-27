@@ -2,31 +2,31 @@
 
 Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 
-## Install instructions
+## Installation Instructions
 
 ### For regular users: Download release
 
 > [!NOTE]
-> Please find Merton for tech support if any of this doesn't work, or if I am not here, the IT department can probably help you
+> Please find Merton for tech support if anything doesn't work, or if I am not here, the IT department can probably help you
 
-1. Download the corresponding zip file from the releases page. Depending on your operating system you will need to download a different file.
+1. Download the corresponding ZIP file from the releases page. Depending on your operating system, you will need to download a different file.
 
-2. Extract the file, there should be a new folder named ExpenseClaimForm-[OS_TYPE]
+2. Extract the file. A new folder named `ExpenseClaimForm-[OS_TYPE]` should appear.
 
-3. Go into that folder and click the executable file named ExpenseClaimForm, again depending on your OS it may have a different file extension
+3. Open that folder and double-click the executable named `ExpenseClaimForm`. Depending on your operating system, it may have a different file extension.
 
 > [!IMPORTANT]
-> Windows Defender or whatever antivirus you use will probably mark this as suspicious/malware. This is because the way we used to package the application (pyinstaller) is also commonly used to package malicious programs. Please be assured that we are not interested in hacking anyone. Just tell Windows Defender to ignore it.
+> Windows Defender or another antivirus program may mark this application as suspicious or malicious. This is because the application is packaged with PyInstaller, which is also commonly used to package malware. Please be assured that we are not trying to hack you. If necessary, configure your antivirus program to allow the application.
 
 ### For advanced users: Run with Python
 
-1. Git clone our repo
+1. Clone the repository:
    ```
    git clone https://github.com/adrienpartier-cmd/VSceptre-Expense-Claim-Form.git
    cd VSceptre-Expense-Claim-Form
    ```
 
-2. Make a virtual environment. This step is technically optional, but it avoids causing conflicts with other packages that you may install/have installed for other purposes, so it is strongly recommended.
+2. Create a virtual environment. This step is technically optional, but it helps avoid conflicts with packages installed for other purposes, so it is strongly recommended.
 
    Windows:
    ```
@@ -34,31 +34,32 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
    .\venv\Scripts\activate
    ```
 
-   MacOS/Linux:
+   macOS/Linux:
    ```
    python3 -m venv venv
-   source venv/bin.activate
+   source venv/bin/activate
    ```
-   
+
 > [!NOTE]
 > 
 > We tested on Python 3.14 and 3.13, older versions may or may not work.
 
-3. Install the required packages
+3. Install the required packages:
    ```
    pip install -r requirements.txt
    ```
-4. Run program
+4. Run the program:
    ```
-   python3 llamacode.py
+   python llamacode.py
    ```
-5. Optional: package for distribution using pyinstaller
+5. Optional: Package for distribution with PyInstaller:
    ```
    pip install pyinstaller
-   pyinstaller -Fn ExpenseClaimForm llamacode.py
+   pyinstaller -F -n ExpenseClaimForm llamacode.py
    ```
+
 ## Legal notices
 
-All the original code in this application is licensed under the MIT License. Some third party libraries may be licensed differently.
+All original code in this application is licensed under the MIT License. Some third-party libraries may be licensed differently.
 
 See [LEGAL_NOTICES.md](LEGAL_NOTICES.md) for included library licenses and source links.

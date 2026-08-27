@@ -1,6 +1,8 @@
 # Licensing Notice
 
-All the original code in this application is licensed under the MIT License, which is provided in [LICENSE.md](LICENSE.md). at  Some third party libraries may be licensed differently, see below:
+All original code in this application is licensed under the MIT License,
+which is provided in [LICENSE.md](LICENSE.md). Some third-party libraries may
+be licensed differently; see below.
 
 # Third-Party Notices
 
