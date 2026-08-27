@@ -7,7 +7,7 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 ### For regular users: Download release
 
 > [!NOTE]
-> Please find Merton for tech support if any of this doesn't work, or if I have already left, the IT department can probably help you
+> Please find Merton for tech support if any of this doesn't work, or if I am not here, the IT department can probably help you
 
 1. Download the corresponding zip file from the releases page. Depending on your operating system you will need to download a different file.
 
