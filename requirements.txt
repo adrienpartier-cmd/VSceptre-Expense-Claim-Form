@@ -2,3 +2,4 @@ llama-cloud-services
 pydantic
 python-dotenv
 openpyxl
+pymupdf
