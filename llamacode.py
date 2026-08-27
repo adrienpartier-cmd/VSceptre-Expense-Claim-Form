@@ -19,6 +19,7 @@ from PIL import Image as PILImage
 import math
 import os
 import shutil
+import sys
 import textwrap
 import warnings
 
@@ -27,7 +28,11 @@ warnings.filterwarnings(
     message="Data Validation extension is not supported and will be removed"
 )
 
-BASE_DIR = Path(__file__).resolve().parent
+# fix for pyinstaller distribution
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 MASTER_FILE = BASE_DIR / "Expense_Claim_MASTER.xlsx"
 OUTPUT_FILE = BASE_DIR / "Expense_Claim_filled.xlsx"
 RECEIPTS_FOLDER = BASE_DIR / "receipts"
