@@ -59,4 +59,6 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
    ```
 ## Legal notices
 
+All the original code in this application is licensed under the MIT License.
+
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for included library licenses and source links.

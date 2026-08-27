@@ -2,5 +2,5 @@ llama-cloud-services
 pydantic
 python-dotenv
 openpyxl
-pymupdf
+pymupdf==1.28.2
 Pillow
