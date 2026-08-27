@@ -1,297 +1,99 @@
-"""
-DYNAMIC EXPENSE CLAIM AUTOMATION
-
-MASTER:
-    Expense_Claim_MASTER.xlsx
-
-WORKING FILE:
-    Expense_Claim_filled.xlsx
-
-RECEIPTS:
-    ./receipts/
-
-
-FINAL MASTER STRUCTURE
-======================
-
-Row 6
-    A      Item
-    B      Date
-    C      Merchant
-    D      Description
-    E:F    Additional Context (if needed)
-    G      Category
-    H:I    Amount (HKD)
-
-Row 7
-    ONE blank receipt template row
-
-Row 8
-    A:D    Category / Categories
-    E:I    Category Total (HKD)
-
-Row 9
-    ONE category-total template row
-
-Row 10
-    Grand Total
-
-Row 11+
-    Submitted By / Approved By / Notes / footer
-
-
-DYNAMIC BEHAVIOUR
-=================
-
-If there are 5 successfully extracted receipts:
-    Python creates exactly 5 receipt rows.
-
-If those receipts use 3 unique categories:
-    Python creates exactly 3 category-summary rows.
-
-There is NO 10-receipt limit.
-
-
-IMPORTANT
-=========
-
-Additional Context = E:F.
-
-Python NEVER writes anything into Additional Context.
-
-It remains completely blank for the user to complete manually.
-
-Python also:
-    - NEVER changes column widths
-    - NEVER resizes/repositions the image
-    - preserves borders and cell formatting
-    - wraps Description in D
-    - increases row HEIGHT only for long descriptions
-    - dynamically extends Category dropdowns
-    - rebuilds summary formulas correctly
-    - moves the entire footer down correctly
-    - reset restores the exact master workbook
-"""
-
-
-# ======================================================================
-# IMPORTS
-# ======================================================================
-
 from llama_cloud_services import LlamaExtract
-
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-)
-
+from pydantic import BaseModel, Field, ValidationError
 from typing import Optional
-
 from pathlib import Path
-
 from dotenv import load_dotenv
-
 from openpyxl import load_workbook
-
-from openpyxl.styles import Alignment
-
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.pagebreak import Break
+from openpyxl.styles import Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
-
 from openpyxl.workbook.defined_name import DefinedName
-
 from openpyxl.utils import range_boundaries
-
 from copy import copy, deepcopy
-
+from datetime import datetime
+from PIL import Image as PILImage
+import math
 import os
 import shutil
 import textwrap
 import warnings
 
-
-# ======================================================================
-# SUPPRESS EXPECTED OPENPYXL WARNING
-# ======================================================================
-
 warnings.filterwarnings(
     "ignore",
-    message=(
-        "Data Validation extension is not supported "
-        "and will be removed"
-    ),
+    message="Data Validation extension is not supported and will be removed"
 )
-
-
-# ======================================================================
-# PATHS
-# ======================================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-
-
-MASTER_FILE = (
-    BASE_DIR
-    / "Expense_Claim_MASTER.xlsx"
-)
-
-
-OUTPUT_FILE = (
-    BASE_DIR
-    / "Expense_Claim_filled.xlsx"
-)
-
-
-RECEIPTS_FOLDER = (
-    BASE_DIR
-    / "receipts"
-)
-
+MASTER_FILE = BASE_DIR / "Expense_Claim_MASTER.xlsx"
+OUTPUT_FILE = BASE_DIR / "Expense_Claim_filled.xlsx"
+RECEIPTS_FOLDER = BASE_DIR / "receipts"
 
 SHEET_NAME = "Form"
-
 DROPDOWN_SHEET = "Dropdown"
 
-
-# ======================================================================
-# FINAL MASTER ROW STRUCTURE
-# ======================================================================
-
 HEADER_ROW = 6
-
 RECEIPT_TEMPLATE_ROW = 7
-
 SUMMARY_HEADER_TEMPLATE_ROW = 8
-
 CATEGORY_TEMPLATE_ROW = 9
-
 GRAND_TOTAL_TEMPLATE_ROW = 10
-
 FOOTER_FIRST_ROW = 11
-
-# Meaningful formatted/footer area in the original master.
-FOOTER_LAST_ROW = 20
-
-
-# ======================================================================
-# FINAL COLUMN STRUCTURE
-# ======================================================================
+FOOTER_LAST_ROW = 24
 
 ITEM_COLUMN = "A"
-
 DATE_COLUMN = "B"
-
 MERCHANT_COLUMN = "C"
-
 DESCRIPTION_COLUMN = "D"
-
-# E:F = MANUAL USER FIELD
 ADDITIONAL_CONTEXT_START_COLUMN = "E"
 ADDITIONAL_CONTEXT_END_COLUMN = "F"
-
 CATEGORY_COLUMN = "G"
-
 AMOUNT_COLUMN = "H"
 AMOUNT_END_COLUMN = "I"
 
-
-# ======================================================================
-# API KEY
-# ======================================================================
-
-load_dotenv(
-    BASE_DIR / ".env"
-)
-
-
-API_KEY = os.getenv(
-    "LLAMA_CLOUD_API_KEY"
-)
-
-
-# ======================================================================
-# EXACT CATEGORY OPTIONS
-# ======================================================================
+load_dotenv(BASE_DIR / ".env")
+API_KEY = os.getenv("LLAMA_CLOUD_API_KEY")
 
 ALLOWED_CATEGORIES = [
-
     "Office/Computer Equipment",
-
     "Furniture & Fixtures",
-
     "Purchase",
-
     "Software - Purchase",
-
     "Misc. Parts - Purchase",
-
     "Audit Fee",
-
     "Bank Charges",
-
     "Business Registration Fee",
-
     "Consulting and Secretarial Fee",
-
     "Legal and Professional Fee",
-
     "Finance Costs",
-
     "General Office Expense",
-
     "Insurance - Office",
-
     "Insurance -Staff (non-sales)",
-
     "Insurance - Contractor",
-
     "Print,Stationery, Due & Subs",
-
     "Postage & Courier",
-
     "Rent & Management Fee - Office",
-
     "Rates & Gov Rent - Office",
-
     "Repairs & Maintenance - Office",
-
     "Telephone & Broadband - Office",
-
     "Utilities - Office",
-
     "MPF (Non-Sales)",
-
     "Legal Fees",
-
     "Office Supplies",
-
     "Selling & Distribution Expense",
-
     "Advertising &Promotion Expense",
-
     "Entertainment",
-
     "Sundry Expense- Office",
-
     "Travelling - Overseas",
-
     "Travelling - Local",
-
     "Training and Seminar Costs",
-
     "Staff Amenities",
-
     "Salaries & Allowances (Sales)",
-
     "Wages & Salaries",
-
     "/",
 ]
-
-
-# ======================================================================
-# CATEGORY PROMPT
-# ======================================================================
 
 CATEGORY_PROMPT = """
 Choose EXACTLY ONE of the following Excel dropdown options.
@@ -449,111 +251,52 @@ Do NOT create a new category.
 """
 
 
-# ======================================================================
-# LLAMA RECEIPT SCHEMA
-# ======================================================================
-
 class Receipt(BaseModel):
-
     merchant_name: str = Field(
-        description=(
-            "Business, shop, restaurant or organisation "
-            "name printed on the receipt."
-        )
+        description="Business, shop, restaurant or organisation name printed on the receipt."
     )
-
-
     receipt_date: str = Field(
-        description=(
-            "Transaction date in DD/MM/YYYY format."
-        )
+        description="Transaction date in DD/MM/YYYY format."
     )
-
-
     description: str = Field(
-        description=(
-            "Concise factual description of the items "
-            "or services purchased. Include important "
-            "product names or model numbers visible on "
-            "the receipt where useful. Do not invent "
-            "information."
-        )
+        description="Concise factual description of the items or services purchased. Include important product names or model numbers visible on the receipt where useful. Do not invent information."
     )
-
-
     total_hkd: float = Field(
-        description=(
-            "Final amount paid as printed on the receipt. "
-            "Do NOT perform currency conversion."
-        )
+        description="Final amount paid as printed on the receipt. Do NOT perform currency conversion."
     )
-
-
     currency: str = Field(
-        description=(
-            "Three-letter currency code such as "
-            "HKD, USD, GBP, EUR, JPY or TWD."
-        )
+        description="Three-letter currency code such as HKD, USD, GBP, EUR, JPY or TWD."
     )
-
-
     category: str = Field(
         description=CATEGORY_PROMPT
     )
-
-
     confidence_note: Optional[str] = Field(
         default=None,
-        description=(
-            "Briefly explain if important receipt information "
-            "is unclear. Otherwise return null."
-        )
+        description="Briefly explain if important receipt information is unclear. Otherwise return null."
     )
 
 
-# ======================================================================
-# FILE CHECKS
-# ======================================================================
-
 def check_master_file():
-
     if not MASTER_FILE.exists():
-
         raise SystemExit(
-            "\nERROR: Expense_Claim_MASTER.xlsx "
-            "was not found.\n\n"
-            f"Expected:\n{MASTER_FILE}\n"
+            f"\nERROR: Expense_Claim_MASTER.xlsx was not found.\n\nExpected:\n{MASTER_FILE}\n"
         )
 
 
 def check_receipts_folder():
-
     if not RECEIPTS_FOLDER.exists():
-
         RECEIPTS_FOLDER.mkdir()
 
         raise SystemExit(
-            "\nCreated receipts folder:\n\n"
-            f"{RECEIPTS_FOLDER}\n\n"
-            "Put receipt files inside it and run "
-            "the program again."
+            f"\nCreated receipts folder:\n\n{RECEIPTS_FOLDER}\n\nPut receipt files inside it and run the program again."
         )
 
 
-# ======================================================================
-# GET RECEIPT FILES
-# ======================================================================
-
 def get_receipt_files():
-
     files = sorted(
-
         file
-
         for file in RECEIPTS_FOLDER.iterdir()
-
-        if file.suffix.lower()
-        in (
+        if file.suffix.lower() in (
             ".jpg",
             ".jpeg",
             ".png",
@@ -561,68 +304,43 @@ def get_receipt_files():
         )
     )
 
-
     if not files:
-
         raise SystemExit(
-            "\nNo receipt files found "
-            "inside the receipts folder."
+            "\nNo receipt files found inside the receipts folder."
         )
-
-
-    # NO MAXIMUM RECEIPT LIMIT
 
     return files
 
 
-# ======================================================================
-# LLAMA AGENT
-# ======================================================================
-
 def get_agent():
-
     if not API_KEY:
-
         raise SystemExit(
             "\nMissing LLAMA_CLOUD_API_KEY.\n\n"
             "Your .env file should contain:\n\n"
             "LLAMA_CLOUD_API_KEY=llx-your-real-key\n"
         )
 
-
     extractor = LlamaExtract(
         api_key=API_KEY
     )
 
-
-    agent_name = (
-        "expense-dynamic-final-v6"
-    )
-
+    agent_name = "expense-dynamic-final-v6"
 
     try:
-
         agent = extractor.get_agent(
             name=agent_name
         )
 
-
         print(
-            f"\nUsing extraction agent "
-            f"'{agent_name}'."
+            f"\nUsing extraction agent '{agent_name}'."
         )
-
 
         return agent
 
-
     except Exception:
-
         print(
-            f"\nCreating extraction agent "
-            f"'{agent_name}'..."
+            f"\nCreating extraction agent '{agent_name}'..."
         )
-
 
         return extractor.create_agent(
             name=agent_name,
@@ -630,373 +348,279 @@ def get_agent():
         )
 
 
-# ======================================================================
-# NORMALISE CATEGORY
-# ======================================================================
-
-def normalise_category(
-    category
-):
-
+def normalise_category(category):
     if not category:
-
         return "/"
-
 
     category = str(
         category
     ).strip()
 
-
-    # Exact match
-
     if category in ALLOWED_CATEGORIES:
-
         return category
 
-
-    # Case-insensitive recovery
-
     for allowed in ALLOWED_CATEGORIES:
-
-        if (
-            category.casefold()
-            == allowed.casefold()
-        ):
-
+        if category.casefold() == allowed.casefold():
             return allowed
-
-
-    # Never invent another category.
 
     return "/"
 
 
-# ======================================================================
-# EXTRACT RECEIPTS
-# ======================================================================
-
-def extract_receipts(
-    files
-):
-
+def extract_receipts(files):
     agent = get_agent()
-
-
     extracted = []
-
+    failed = []
 
     print(
         f"\nFound {len(files)} receipt(s).\n"
     )
 
-
     for number, file in enumerate(
         files,
         start=1
     ):
+        success = False
+        last_error = None
 
-
-        print(
-            f"[{number}/{len(files)}] "
-            f"Extracting {file.name} ..."
-        )
-
-
-        try:
-
-            result = agent.extract(
-                str(file)
+        for attempt in range(
+            1,
+            4
+        ):
+            print(
+                f"[{number}/{len(files)}] "
+                f"Extracting {file.name} "
+                f"(attempt {attempt}/3) ..."
             )
 
+            try:
+                result = agent.extract(
+                    str(file)
+                )
 
-            receipt = (
-                Receipt.model_validate(
+                receipt = Receipt.model_validate(
                     result.data
                 )
-            )
 
+                data = receipt.model_dump()
 
-            data = (
-                receipt.model_dump()
-            )
-
-
-            data["category"] = (
-                normalise_category(
+                data["category"] = normalise_category(
                     data["category"]
                 )
-            )
 
+                data["source_file"] = file.name
 
-            data["source_file"] = (
-                file.name
-            )
-
-
-            extracted.append(
-                data
-            )
-
-
-            print(
-                f"    Merchant : "
-                f"{data['merchant_name']}"
-            )
-
-
-            print(
-                f"    Date     : "
-                f"{data['receipt_date']}"
-            )
-
-
-            print(
-                f"    Category : "
-                f"{data['category']}"
-            )
-
-
-            print(
-                f"    Amount   : "
-                f"{data['currency']} "
-                f"{data['total_hkd']}"
-            )
-
-
-            if data.get(
-                "confidence_note"
-            ):
-
-                print(
-                    f"    NOTE     : "
-                    f"{data['confidence_note']}"
+                extracted.append(
+                    data
                 )
 
+                print(
+                    f"    Merchant : {data['merchant_name']}"
+                )
 
-            print()
+                print(
+                    f"    Date     : {data['receipt_date']}"
+                )
 
+                print(
+                    f"    Category : {data['category']}"
+                )
 
-        except ValidationError as error:
+                print(
+                    f"    Amount   : "
+                    f"{data['currency']} "
+                    f"{data['total_hkd']}"
+                )
 
-            print(
-                f"\n[VALIDATION ERROR] "
-                f"{file.name}\n"
-                f"{error}\n"
+                if data.get(
+                    "confidence_note"
+                ):
+                    print(
+                        f"    NOTE     : "
+                        f"{data['confidence_note']}"
+                    )
+
+                print()
+
+                success = True
+                break
+
+            except Exception as error:
+                last_error = error
+
+                print(
+                    f"    Attempt {attempt} failed: "
+                    f"{error}"
+                )
+
+        if not success:
+            failed.append(
+                (
+                    file.name,
+                    last_error
+                )
             )
 
-
-        except Exception as error:
-
-            print(
-                f"\n[EXTRACTION ERROR] "
-                f"{file.name}\n"
-                f"{error}\n"
-            )
-
-
-    if not extracted:
-
-        raise SystemExit(
-            "\nNo receipts were successfully extracted."
+    if failed:
+        names = "\n".join(
+            f"• {name}: {error}"
+            for name, error in failed
         )
 
+        raise SystemExit(
+            f"\nERROR: {len(failed)} of {len(files)} "
+            f"receipt(s) could not be extracted "
+            f"after 3 attempts.\n\n"
+            f"{names}\n\n"
+            f"No filled workbook was created because "
+            f"every receipt must be included."
+        )
+
+    if len(extracted) != len(files):
+        raise SystemExit(
+            f"\nERROR: Found {len(files)} receipt files "
+            f"but extracted only {len(extracted)}. "
+            f"No filled workbook was created."
+        )
 
     return extracted
 
 
-# ======================================================================
-# GET UNIQUE CATEGORIES
-# ======================================================================
+def sort_receipts_chronologically(extracted):
+    indexed = list(
+        enumerate(
+            extracted
+        )
+    )
 
-def get_unique_categories(
-    extracted
-):
+    def sort_key(item):
+        original_index, receipt = item
 
-    """
-    Number of category rows =
-    number of unique categories selected by Llama.
+        raw_date = str(
+            receipt.get(
+                "receipt_date",
+                ""
+            )
+        ).strip()
 
-    Categories remain in first-occurrence order.
-    """
+        try:
+            parsed_date = datetime.strptime(
+                raw_date,
+                "%d/%m/%Y"
+            )
 
+            return (
+                0,
+                parsed_date,
+                original_index
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+            return (
+                1,
+                datetime.max,
+                original_index
+            )
+
+    sorted_receipts = [
+        receipt
+        for _, receipt in sorted(
+            indexed,
+            key=sort_key
+        )
+    ]
+
+    print(
+        "\nReceipts sorted chronologically "
+        "(earliest to latest)."
+    )
+
+    for item_number, receipt in enumerate(
+        sorted_receipts,
+        start=1
+    ):
+        print(
+            f"    Item {item_number}: "
+            f"{receipt.get('receipt_date', '')} - "
+            f"{receipt.get('merchant_name', '')}"
+        )
+
+    return sorted_receipts
+
+
+def get_unique_categories(extracted):
     categories = []
 
-
     for receipt in extracted:
-
-        category = (
-            normalise_category(
-                receipt.get(
-                    "category"
-                )
+        category = normalise_category(
+            receipt.get(
+                "category"
             )
         )
 
-
         if category not in categories:
-
             categories.append(
                 category
             )
 
-
     return categories
 
-
-# ======================================================================
-# COPY CELL FORMAT
-# ======================================================================
-
-def copy_cell_format(
-    source,
-    target
-):
-
-    """
-    Copy formatting only.
-
-    Does NOT copy:
-        - value
-        - formula
-    """
-
-    if source.has_style:
-
-        target._style = copy(
-            source._style
-        )
-
-
-    target.font = copy(
-        source.font
-    )
-
-
-    target.fill = copy(
-        source.fill
-    )
-
-
-    target.border = copy(
-        source.border
-    )
-
-
-    target.alignment = copy(
-        source.alignment
-    )
-
-
-    target.number_format = (
-        source.number_format
-    )
-
-
-    target.protection = copy(
-        source.protection
-    )
-
-
-# ======================================================================
-# SNAPSHOT A ROW
-# ======================================================================
 
 def snapshot_row(
     ws,
     row,
     max_column=27
 ):
-
-    """
-    Store complete row formatting + contents.
-
-    Columns A:AA are stored because the master workbook contains
-    formatting through AA.
-    """
-
     cells = []
-
 
     for column in range(
         1,
         max_column + 1
     ):
-
         cell = ws.cell(
             row=row,
             column=column
         )
 
-
         cells.append(
             {
-                "value":
-                    cell.value,
-
-                "style":
-                    copy(
-                        cell._style
-                    ),
-
-                "font":
-                    copy(
-                        cell.font
-                    ),
-
-                "fill":
-                    copy(
-                        cell.fill
-                    ),
-
-                "border":
-                    copy(
-                        cell.border
-                    ),
-
-                "alignment":
-                    copy(
-                        cell.alignment
-                    ),
-
-                "number_format":
-                    cell.number_format,
-
-                "protection":
-                    copy(
-                        cell.protection
-                    ),
+                "value": cell.value,
+                "style": copy(
+                    cell._style
+                ),
+                "font": copy(
+                    cell.font
+                ),
+                "fill": copy(
+                    cell.fill
+                ),
+                "border": copy(
+                    cell.border
+                ),
+                "alignment": copy(
+                    cell.alignment
+                ),
+                "number_format": cell.number_format,
+                "protection": copy(
+                    cell.protection
+                ),
             }
         )
-
 
     dimension = ws.row_dimensions[
         row
     ]
 
-
     return {
-
-        "cells":
-            cells,
-
-        "height":
-            dimension.height,
-
-        "hidden":
-            dimension.hidden,
-
-        "outline_level":
-            dimension.outlineLevel,
-
-        "collapsed":
-            dimension.collapsed,
+        "cells": cells,
+        "height": dimension.height,
+        "hidden": dimension.hidden,
+        "outline_level": dimension.outlineLevel,
+        "collapsed": dimension.collapsed,
     }
 
-
-# ======================================================================
-# RESTORE A SNAPSHOTTED ROW
-# ======================================================================
 
 def restore_row(
     ws,
@@ -1004,146 +628,102 @@ def restore_row(
     snapshot,
     copy_values=True
 ):
-
     for column, saved in enumerate(
         snapshot["cells"],
         start=1
     ):
-
         target = ws.cell(
             row=row,
             column=column
         )
 
-
         target._style = copy(
             saved["style"]
         )
-
 
         target.font = copy(
             saved["font"]
         )
 
-
         target.fill = copy(
             saved["fill"]
         )
-
 
         target.border = copy(
             saved["border"]
         )
 
-
         target.alignment = copy(
             saved["alignment"]
         )
 
-
-        target.number_format = (
-            saved[
-                "number_format"
-            ]
-        )
-
+        target.number_format = saved[
+            "number_format"
+        ]
 
         target.protection = copy(
             saved["protection"]
         )
 
-
         if copy_values:
-
-            target.value = (
-                saved["value"]
-            )
-
-
+            target.value = saved[
+                "value"
+            ]
         else:
-
             target.value = None
-
 
     dimension = ws.row_dimensions[
         row
     ]
 
+    dimension.height = snapshot[
+        "height"
+    ]
 
-    dimension.height = (
-        snapshot["height"]
-    )
+    dimension.hidden = snapshot[
+        "hidden"
+    ]
 
+    dimension.outlineLevel = snapshot[
+        "outline_level"
+    ]
 
-    dimension.hidden = (
-        snapshot["hidden"]
-    )
+    dimension.collapsed = snapshot[
+        "collapsed"
+    ]
 
-
-    dimension.outlineLevel = (
-        snapshot[
-            "outline_level"
-        ]
-    )
-
-
-    dimension.collapsed = (
-        snapshot[
-            "collapsed"
-        ]
-    )
-
-
-# ======================================================================
-# SNAPSHOT MERGED RANGES
-# ======================================================================
 
 def snapshot_merges(
     ws,
     first_row,
     last_row
 ):
-
     merges = []
-
 
     for merged in list(
         ws.merged_cells.ranges
     ):
-
-        (
-            min_col,
-            min_row,
-            max_col,
-            max_row,
-        ) = range_boundaries(
+        min_col, min_row, max_col, max_row = range_boundaries(
             str(
                 merged
             )
         )
 
-
         if (
             min_row >= first_row
             and max_row <= last_row
         ):
-
             merges.append(
                 (
                     min_col,
                     min_row,
                     max_col,
-                    max_row,
+                    max_row
                 )
             )
 
-
     return merges
 
-
-# ======================================================================
-# COPY / OFFSET MERGES
-# ======================================================================
 
 def recreate_shifted_merges(
     ws,
@@ -1151,73 +731,50 @@ def recreate_shifted_merges(
     source_first_row,
     destination_first_row
 ):
-
     offset = (
         destination_first_row
         - source_first_row
     )
 
-
     for (
         min_col,
         min_row,
         max_col,
-        max_row,
+        max_row
     ) in merges:
-
         new_min_row = (
             min_row
             + offset
         )
-
 
         new_max_row = (
             max_row
             + offset
         )
 
-
         start = ws.cell(
             row=new_min_row,
             column=min_col
         ).coordinate
-
 
         end = ws.cell(
             row=new_max_row,
             column=max_col
         ).coordinate
 
-
         ws.merge_cells(
             f"{start}:{end}"
         )
 
-
-# ======================================================================
-# DESCRIPTION WRAPPING
-# ======================================================================
 
 def wrap_description(
     ws,
     row,
     description
 ):
-
-    """
-    Column D only.
-
-    NEVER changes column width.
-
-    Long descriptions:
-        -> wrap to multiple lines
-        -> increase row height only
-    """
-
     cell = ws[
         f"{DESCRIPTION_COLUMN}{row}"
     ]
-
 
     current_width = (
         ws.column_dimensions[
@@ -1225,9 +782,6 @@ def wrap_description(
         ].width
         or 30
     )
-
-
-    # Conservative wrapping so text stays inside border.
 
     characters_per_line = max(
         15,
@@ -1237,128 +791,75 @@ def wrap_description(
         )
     )
 
-
     lines = []
-
 
     for paragraph in str(
         description
     ).splitlines():
-
-
-        paragraph = (
-            paragraph.strip()
-        )
-
+        paragraph = paragraph.strip()
 
         if not paragraph:
-
             lines.append("")
-
             continue
 
-
-        wrapped_lines = (
-            textwrap.wrap(
-                paragraph,
-                width=characters_per_line,
-                break_long_words=False,
-                break_on_hyphens=False,
-                replace_whitespace=True,
-                drop_whitespace=True,
-            )
+        wrapped_lines = textwrap.wrap(
+            paragraph,
+            width=characters_per_line,
+            break_long_words=False,
+            break_on_hyphens=False,
+            replace_whitespace=True,
+            drop_whitespace=True,
         )
 
-
         if wrapped_lines:
-
             lines.extend(
                 wrapped_lines
             )
-
-
         else:
-
             lines.append(
                 paragraph
             )
 
-
     if not lines:
-
         lines = [""]
 
-
-    cell.value = (
-        "\n".join(
-            lines
-        )
+    cell.value = "\n".join(
+        lines
     )
-
 
     old_alignment = copy(
         cell.alignment
     )
 
-
     cell.alignment = Alignment(
-
-        horizontal=
-            old_alignment.horizontal,
-
+        horizontal=old_alignment.horizontal,
         vertical="top",
-
-        text_rotation=
-            old_alignment.text_rotation,
-
+        text_rotation=old_alignment.text_rotation,
         wrap_text=True,
-
         shrink_to_fit=False,
-
-        indent=
-            old_alignment.indent,
-
-        relativeIndent=
-            old_alignment.relativeIndent,
-
-        justifyLastLine=
-            old_alignment.justifyLastLine,
-
-        readingOrder=
-            old_alignment.readingOrder,
+        indent=old_alignment.indent,
+        relativeIndent=old_alignment.relativeIndent,
+        justifyLastLine=old_alignment.justifyLastLine,
+        readingOrder=old_alignment.readingOrder,
     )
-
-
-    # --------------------------------------------------------------
-    # ROW HEIGHT ONLY
-    # --------------------------------------------------------------
 
     line_count = max(
         1,
-        len(lines)
+        len(
+            lines
+        )
     )
-
-
-    HEIGHT_PER_LINE = 18
-
-    EXTRA_PADDING = 4
-
 
     required_height = (
         line_count
-        * HEIGHT_PER_LINE
-        + EXTRA_PADDING
+        * 18
+        + 4
     )
-
 
     ws.row_dimensions[
         row
     ].height = required_height
 
-
-# ======================================================================
-# CREATE CATEGORY DROPDOWN
-# ======================================================================
 
 def create_category_dropdown(
     wb,
@@ -1366,143 +867,67 @@ def create_category_dropdown(
     first_receipt_row,
     last_receipt_row
 ):
-
-    """
-    Final Category column = G.
-
-    Dropdown is attached to every dynamically generated receipt row.
-
-    Yellow input message is disabled.
-    """
-
     if DROPDOWN_SHEET not in wb.sheetnames:
-
         raise KeyError(
-            f"Worksheet "
-            f"'{DROPDOWN_SHEET}' "
-            "was not found."
+            f"Worksheet '{DROPDOWN_SHEET}' "
+            f"was not found."
         )
 
-
-    range_name = (
-        "ExpenseCategories"
-    )
-
-
-    # --------------------------------------------------------------
-    # REMOVE OLD NAMED RANGE
-    # --------------------------------------------------------------
+    range_name = "ExpenseCategories"
 
     try:
-
         if range_name in wb.defined_names:
-
             del wb.defined_names[
                 range_name
             ]
 
-
     except Exception:
-
         pass
 
-
-    # --------------------------------------------------------------
-    # CREATE CLEAN NAMED RANGE
-    # --------------------------------------------------------------
-
-    category_range = (
-        DefinedName(
-
-            range_name,
-
-            attr_text=(
-                "'Dropdown'!"
-                "$A$1:$A$36"
-            )
-        )
+    category_range = DefinedName(
+        range_name,
+        attr_text="'Dropdown'!$A$1:$A$36"
     )
 
-
     try:
-
         wb.defined_names.add(
             category_range
         )
 
-
     except AttributeError:
-
         wb.defined_names.append(
             category_range
         )
 
-
-    # --------------------------------------------------------------
-    # REMOVE OLD LIST VALIDATIONS
-    # --------------------------------------------------------------
-
     for validation in list(
         ws.data_validations.dataValidation
     ):
-
-        if (
-            validation.type
-            == "list"
-        ):
-
+        if validation.type == "list":
             try:
-
                 ws.data_validations.dataValidation.remove(
                     validation
                 )
 
-
             except ValueError:
-
                 pass
 
-
-    # --------------------------------------------------------------
-    # CREATE NEW DROPDOWN
-    # --------------------------------------------------------------
-
     dropdown = DataValidation(
-
         type="list",
-
-        formula1=(
-            "=ExpenseCategories"
-        ),
-
-        allow_blank=True,
+        formula1="=ExpenseCategories",
+        allow_blank=True
     )
-
 
     dropdown.showErrorMessage = True
-
-
-    dropdown.errorTitle = (
-        "Invalid Category"
-    )
-
-
+    dropdown.errorTitle = "Invalid Category"
     dropdown.error = (
         "Please select a category "
         "from the dropdown list."
     )
-
-
-    # IMPORTANT:
-    # no yellow popup message
-
     dropdown.showInputMessage = False
-
 
     ws.add_data_validation(
         dropdown
     )
-
 
     dropdown.add(
         f"{CATEGORY_COLUMN}"
@@ -1512,32 +937,11 @@ def create_category_dropdown(
     )
 
 
-# ======================================================================
-# BUILD DYNAMIC FORM
-# ======================================================================
-
 def build_dynamic_form(
     wb,
     ws,
     extracted
 ):
-
-    """
-    Completely rebuild rows 7 onward from clean master snapshots.
-
-    This avoids depending on openpyxl to correctly shift:
-        - merged cells
-        - formulas
-        - row heights
-        - footer formatting
-
-    Those elements are explicitly recreated instead.
-    """
-
-    # ==============================================================
-    # COUNTS
-    # ==============================================================
-
     receipt_count = max(
         1,
         len(
@@ -1545,13 +949,9 @@ def build_dynamic_form(
         )
     )
 
-
-    unique_categories = (
-        get_unique_categories(
-            extracted
-        )
+    unique_categories = get_unique_categories(
+        extracted
     )
-
 
     category_count = max(
         1,
@@ -1560,47 +960,32 @@ def build_dynamic_form(
         )
     )
 
-
-    # ==============================================================
-    # SNAPSHOT MASTER ROWS BEFORE CHANGING ANYTHING
-    # ==============================================================
-
     receipt_template = snapshot_row(
         ws,
         RECEIPT_TEMPLATE_ROW
     )
-
 
     summary_header_template = snapshot_row(
         ws,
         SUMMARY_HEADER_TEMPLATE_ROW
     )
 
-
     category_template = snapshot_row(
         ws,
         CATEGORY_TEMPLATE_ROW
     )
-
 
     grand_total_template = snapshot_row(
         ws,
         GRAND_TOTAL_TEMPLATE_ROW
     )
 
-
-    # --------------------------------------------------------------
-    # FOOTER
-    # --------------------------------------------------------------
-
     footer_snapshots = []
-
 
     for row in range(
         FOOTER_FIRST_ROW,
         FOOTER_LAST_ROW + 1
     ):
-
         footer_snapshots.append(
             snapshot_row(
                 ws,
@@ -1608,45 +993,31 @@ def build_dynamic_form(
             )
         )
 
-
     footer_merges = snapshot_merges(
         ws,
         FOOTER_FIRST_ROW,
         FOOTER_LAST_ROW
     )
 
-
-    # ==============================================================
-    # SAVE IMAGE EXACTLY
-    # ==============================================================
+    master_row_breaks = [
+        b.id
+        for b in ws.row_breaks.brk
+    ]
 
     image_states = []
 
-
     for image in ws._images:
-
         image_states.append(
             {
-                "width":
-                    image.width,
-
-                "height":
-                    image.height,
-
-                "anchor":
-                    deepcopy(
-                        image.anchor
-                    ),
+                "width": image.width,
+                "height": image.height,
+                "anchor": deepcopy(
+                    image.anchor
+                ),
             }
         )
 
-
-    # ==============================================================
-    # SAVE ORIGINAL COLUMN WIDTHS
-    # ==============================================================
-
     original_widths = {}
-
 
     for column in (
         "A",
@@ -1659,24 +1030,13 @@ def build_dynamic_form(
         "H",
         "I",
     ):
-
         original_widths[
             column
-        ] = (
-            ws.column_dimensions[
-                column
-            ].width
-        )
+        ] = ws.column_dimensions[
+            column
+        ].width
 
-
-    # ==============================================================
-    # CALCULATE FINAL ROW POSITIONS
-    # ==============================================================
-
-    first_receipt_row = (
-        RECEIPT_TEMPLATE_ROW
-    )
-
+    first_receipt_row = RECEIPT_TEMPLATE_ROW
 
     last_receipt_row = (
         first_receipt_row
@@ -1684,18 +1044,15 @@ def build_dynamic_form(
         - 1
     )
 
-
     summary_header_row = (
         last_receipt_row
         + 1
     )
 
-
     first_category_row = (
         summary_header_row
         + 1
     )
-
 
     last_category_row = (
         first_category_row
@@ -1703,96 +1060,59 @@ def build_dynamic_form(
         - 1
     )
 
-
     grand_total_row = (
         last_category_row
         + 1
     )
-
 
     footer_first_destination = (
         grand_total_row
         + 1
     )
 
-
-    footer_shift = (
-        footer_first_destination
-        - FOOTER_FIRST_ROW
-    )
-
-
-    # ==============================================================
-    # UNMERGE ALL MASTER MERGES FROM ROW 7 DOWNWARD
-    #
-    # Keep everything in rows 1-6 untouched.
-    # ==============================================================
-
     for merged in list(
         ws.merged_cells.ranges
     ):
-
-        (
-            _,
-            min_row,
-            _,
-            max_row,
-        ) = range_boundaries(
+        _, min_row, _, _ = range_boundaries(
             str(
                 merged
             )
         )
 
-
         if min_row >= RECEIPT_TEMPLATE_ROW:
-
             ws.unmerge_cells(
                 str(
                     merged
                 )
             )
 
-
-    # ==============================================================
-    # INSERT THE REQUIRED EXTRA SPACE
-    #
-    # Master already has:
-    #
-    # 1 receipt row
-    # 1 category row
-    #
-    # therefore:
-    #
-    # extra rows =
-    #     (receipt_count - 1)
-    #     +
-    #     (category_count - 1)
-    # ==============================================================
-
     extra_rows = (
-        (receipt_count - 1)
-        +
-        (category_count - 1)
+        receipt_count
+        - 1
+        + category_count
+        - 1
     )
 
-
     if extra_rows > 0:
-
-        # Insert immediately before original footer.
-        #
-        # We will manually rebuild everything anyway.
-
         ws.insert_rows(
             FOOTER_FIRST_ROW,
             amount=extra_rows
         )
 
+    ws.row_breaks.brk = []
 
-    # ==============================================================
-    # CLEAR THE ENTIRE DYNAMIC AREA
-    #
-    # We rebuild every row explicitly.
-    # ==============================================================
+    for break_id in master_row_breaks:
+        shifted_break_id = (
+            break_id + extra_rows
+            if break_id >= FOOTER_FIRST_ROW
+            else break_id
+        )
+
+        ws.row_breaks.append(
+            Break(
+                id=shifted_break_id
+            )
+        )
 
     final_footer_last_row = (
         footer_first_destination
@@ -1802,32 +1122,23 @@ def build_dynamic_form(
         - 1
     )
 
-
     for row in range(
         RECEIPT_TEMPLATE_ROW,
         final_footer_last_row + 1
     ):
-
         for column in range(
             1,
             28
         ):
-
             ws.cell(
                 row=row,
                 column=column
             ).value = None
 
-
-    # ==============================================================
-    # RECEIPT ROWS
-    # ==============================================================
-
     for row in range(
         first_receipt_row,
         last_receipt_row + 1
     ):
-
         restore_row(
             ws,
             row,
@@ -1835,26 +1146,13 @@ def build_dynamic_form(
             copy_values=False
         )
 
-
-        # ----------------------------------------------------------
-        # FINAL RECEIPT MERGES
-        # ----------------------------------------------------------
-
-        # Additional Context
         ws.merge_cells(
             f"E{row}:F{row}"
         )
 
-
-        # Amount
         ws.merge_cells(
             f"H{row}:I{row}"
         )
-
-
-        # ----------------------------------------------------------
-        # ITEM NUMBER
-        # ----------------------------------------------------------
 
         ws[
             f"A{row}"
@@ -1864,22 +1162,9 @@ def build_dynamic_form(
             + 1
         )
 
-
-        # ----------------------------------------------------------
-        # ADDITIONAL CONTEXT
-        #
-        # MANUAL USER FIELD.
-        # ALWAYS EMPTY.
-        # ----------------------------------------------------------
-
         ws[
             f"E{row}"
         ] = None
-
-
-    # ==============================================================
-    # SUMMARY HEADER
-    # ==============================================================
 
     restore_row(
         ws,
@@ -1888,42 +1173,28 @@ def build_dynamic_form(
         copy_values=False
     )
 
-
     ws.merge_cells(
         f"A{summary_header_row}:"
         f"D{summary_header_row}"
     )
-
 
     ws.merge_cells(
         f"E{summary_header_row}:"
         f"I{summary_header_row}"
     )
 
-
     ws[
         f"A{summary_header_row}"
-    ] = (
-        "Category / Categories"
-    )
-
+    ] = "Category / Categories"
 
     ws[
         f"E{summary_header_row}"
-    ] = (
-        "Category Total (HKD)"
-    )
-
-
-    # ==============================================================
-    # CATEGORY SUMMARY ROWS
-    # ==============================================================
+    ] = "Category Total (HKD)"
 
     for row in range(
         first_category_row,
         last_category_row + 1
     ):
-
         restore_row(
             ws,
             row,
@@ -1931,28 +1202,13 @@ def build_dynamic_form(
             copy_values=False
         )
 
-
         ws.merge_cells(
             f"A{row}:D{row}"
         )
 
-
         ws.merge_cells(
             f"E{row}:I{row}"
         )
-
-
-        # ----------------------------------------------------------
-        # CATEGORY FORMULA
-        #
-        # Category appears only when:
-        #
-        # G is not blank
-        # AND
-        # H is not zero
-        #
-        # Exactly as previously requested.
-        # ----------------------------------------------------------
 
         position = (
             row
@@ -1960,99 +1216,53 @@ def build_dynamic_form(
             + 1
         )
 
-
         ws[
             f"A{row}"
         ] = (
-
             '=IFERROR('
-
             'INDEX('
-
             '_xlfn.UNIQUE('
-
             '_xlfn._xlws.FILTER('
-
             f'$G${first_receipt_row}:'
             f'$G${last_receipt_row},'
-
-            f'('
-            f'$G${first_receipt_row}:'
-            f'$G${last_receipt_row}'
-            f'<>"")'
-
+            f'($G${first_receipt_row}:'
+            f'$G${last_receipt_row}<>"")'
             '*'
-
-            f'('
-            f'$H${first_receipt_row}:'
-            f'$H${last_receipt_row}'
-            f'<>0)'
-
+            f'($H${first_receipt_row}:'
+            f'$H${last_receipt_row}<>0)'
             ')'
-
             '),'
-
             f'{position}'
-
             '),'
-
             '""'
-
             ')'
         )
-
-
-        # ----------------------------------------------------------
-        # CATEGORY TOTAL
-        # ----------------------------------------------------------
 
         ws[
             f"E{row}"
         ] = (
-
             f'=IF('
-
             f'A{row}="",'
-
             f'"",'
-
             f'IF('
-
             f'SUMIF('
-
             f'$G${first_receipt_row}:'
             f'$G${last_receipt_row},'
-
             f'A{row},'
-
             f'$H${first_receipt_row}:'
             f'$H${last_receipt_row}'
-
             f')=0,'
-
             f'"",'
-
             f'SUMIF('
-
             f'$G${first_receipt_row}:'
             f'$G${last_receipt_row},'
-
             f'A{row},'
-
             f'$H${first_receipt_row}:'
             f'$H${last_receipt_row}'
-
             f')'
-
             f')'
-
             f')'
         )
-
-
-    # ==============================================================
-    # GRAND TOTAL
-    # ==============================================================
 
     restore_row(
         ws,
@@ -2061,53 +1271,36 @@ def build_dynamic_form(
         copy_values=False
     )
 
-
     ws.merge_cells(
         f"A{grand_total_row}:"
         f"D{grand_total_row}"
     )
-
 
     ws.merge_cells(
         f"E{grand_total_row}:"
         f"I{grand_total_row}"
     )
 
-
     ws[
         f"A{grand_total_row}"
-    ] = (
-        "Grand Total (HKD)"
-    )
-
+    ] = "Grand Total (HKD)"
 
     ws[
         f"E{grand_total_row}"
     ] = (
-
         f'=SUM('
-
         f'$H${first_receipt_row}:'
-
         f'$H${last_receipt_row}'
-
         f')'
     )
-
-
-    # ==============================================================
-    # RESTORE FOOTER ROWS EXACTLY
-    # ==============================================================
 
     for index, footer_snapshot in enumerate(
         footer_snapshots
     ):
-
         destination_row = (
             footer_first_destination
             + index
         )
-
 
         restore_row(
             ws,
@@ -2116,22 +1309,12 @@ def build_dynamic_form(
             copy_values=True
         )
 
-
-    # ==============================================================
-    # RESTORE FOOTER MERGES EXACTLY AT NEW POSITION
-    # ==============================================================
-
     recreate_shifted_merges(
         ws,
         footer_merges,
         FOOTER_FIRST_ROW,
         footer_first_destination
     )
-
-
-    # ==============================================================
-    # CATEGORY DROPDOWN
-    # ==============================================================
 
     create_category_dropdown(
         wb,
@@ -2140,148 +1323,76 @@ def build_dynamic_form(
         last_receipt_row
     )
 
-
-    # ==============================================================
-    # RESTORE ORIGINAL COLUMN WIDTHS
-    # ==============================================================
-
-    for (
-        column,
-        width
-    ) in original_widths.items():
-
+    for column, width in original_widths.items():
         ws.column_dimensions[
             column
         ].width = width
 
-
-    # ==============================================================
-    # RESTORE IMAGE EXACTLY
-    # ==============================================================
-
-    for (
-        image,
-        saved
-    ) in zip(
+    for image, saved in zip(
         ws._images,
         image_states
     ):
+        image.width = saved[
+            "width"
+        ]
 
-        image.width = (
-            saved["width"]
-        )
-
-
-        image.height = (
-            saved["height"]
-        )
-
+        image.height = saved[
+            "height"
+        ]
 
         image.anchor = deepcopy(
-            saved["anchor"]
+            saved[
+                "anchor"
+            ]
         )
 
-
     return {
-
-        "receipt_count":
-            receipt_count,
-
-        "unique_category_count":
-            len(
-                unique_categories
-            ),
-
-        "first_receipt_row":
-            first_receipt_row,
-
-        "last_receipt_row":
-            last_receipt_row,
-
-        "summary_header_row":
-            summary_header_row,
-
-        "first_category_row":
-            first_category_row,
-
-        "last_category_row":
-            last_category_row,
-
-        "grand_total_row":
-            grand_total_row,
-
-        "footer_first_row":
-            footer_first_destination,
+        "receipt_count": receipt_count,
+        "unique_category_count": len(
+            unique_categories
+        ),
+        "first_receipt_row": first_receipt_row,
+        "last_receipt_row": last_receipt_row,
+        "summary_header_row": summary_header_row,
+        "first_category_row": first_category_row,
+        "last_category_row": last_category_row,
+        "grand_total_row": grand_total_row,
+        "footer_first_row": footer_first_destination,
     }
 
-
-# ======================================================================
-# WRITE RECEIPTS
-# ======================================================================
 
 def write_receipts(
     ws,
     extracted,
     layout
 ):
-
-    first_receipt_row = (
-        layout[
-            "first_receipt_row"
-        ]
-    )
-
+    first_receipt_row = layout[
+        "first_receipt_row"
+    ]
 
     for index, receipt in enumerate(
         extracted
     ):
-
         row = (
             first_receipt_row
             + index
         )
 
-
-        # ==========================================================
-        # A — ITEM
-        # ==========================================================
-
         ws[
             f"A{row}"
-        ] = (
-            index + 1
-        )
-
-
-        # ==========================================================
-        # B — DATE
-        # ==========================================================
+        ] = index + 1
 
         ws[
             f"B{row}"
-        ] = (
-            receipt[
-                "receipt_date"
-            ]
-        )
-
-
-        # ==========================================================
-        # C — MERCHANT
-        # ==========================================================
+        ] = receipt[
+            "receipt_date"
+        ]
 
         ws[
             f"C{row}"
-        ] = (
-            receipt[
-                "merchant_name"
-            ]
-        )
-
-
-        # ==========================================================
-        # D — DESCRIPTION
-        # ==========================================================
+        ] = receipt[
+            "merchant_name"
+        ]
 
         wrap_description(
             ws,
@@ -2291,41 +1402,19 @@ def write_receipts(
             ]
         )
 
-
-        # ==========================================================
-        # E:F — ADDITIONAL CONTEXT
-        #
-        # ABSOLUTELY UNTOUCHED BY EXTRACTION.
-        #
-        # Blank manual-entry field.
-        # ==========================================================
-
         ws[
             f"E{row}"
         ] = None
 
-
-        # ==========================================================
-        # G — CATEGORY
-        # ==========================================================
-
-        category = (
-            normalise_category(
-                receipt[
-                    "category"
-                ]
-            )
+        category = normalise_category(
+            receipt[
+                "category"
+            ]
         )
-
 
         ws[
             f"G{row}"
         ] = category
-
-
-        # ==========================================================
-        # H:I — AMOUNT
-        # ==========================================================
 
         currency = str(
             receipt[
@@ -2333,51 +1422,32 @@ def write_receipts(
             ]
         ).upper()
 
-
         if currency == "HKD":
-
             ws[
                 f"H{row}"
-            ] = (
-                receipt[
-                    "total_hkd"
-                ]
-            )
-
+            ] = receipt[
+                "total_hkd"
+            ]
 
         else:
-
-            # ------------------------------------------------------
-            # FOREIGN CURRENCY
-            #
-            # Leave HKD amount blank.
-            #
-            # User checks bank/card statement and manually enters
-            # actual converted HKD amount.
-            # ------------------------------------------------------
-
             ws[
                 f"H{row}"
             ] = None
 
-
             print(
                 "\n[FOREIGN CURRENCY]"
             )
-
 
             print(
                 f"Receipt: "
                 f"{receipt['source_file']}"
             )
 
-
             print(
                 f"Original amount: "
                 f"{currency} "
                 f"{receipt['total_hkd']}"
             )
-
 
             print(
                 f"Please manually enter "
@@ -2386,81 +1456,830 @@ def write_receipts(
             )
 
 
-        print(
-            f"\nReceipt {index + 1}:"
+def prepare_receipt_images(
+    source_file,
+    render_folder
+):
+    source_path = (
+        RECEIPTS_FOLDER
+        / source_file
+    )
+
+    suffix = source_path.suffix.lower()
+
+    if suffix in (
+        ".jpg",
+        ".jpeg",
+        ".png",
+    ):
+        return [
+            source_path
+        ]
+
+    if suffix == ".pdf":
+        try:
+            import fitz
+
+        except ImportError:
+            raise RuntimeError(
+                "PDF receipt embedding requires "
+                "PyMuPDF. Install it with: "
+                "pip install pymupdf"
+            )
+
+        render_folder.mkdir(
+            parents=True,
+            exist_ok=True
         )
 
-
-        print(
-            f"    Row      : {row}"
+        document = fitz.open(
+            str(
+                source_path
+            )
         )
 
+        rendered_pages = []
 
-        print(
-            f"    Merchant : "
-            f"{receipt['merchant_name']}"
+        try:
+            for page_number in range(
+                len(
+                    document
+                )
+            ):
+                page = document[
+                    page_number
+                ]
+
+                pixmap = page.get_pixmap(
+                    matrix=fitz.Matrix(
+                        2.0,
+                        2.0
+                    ),
+                    alpha=False
+                )
+
+                output_path = (
+                    render_folder
+                    / (
+                        f"{source_path.stem}"
+                        f"_page_"
+                        f"{page_number + 1}.png"
+                    )
+                )
+
+                pixmap.save(
+                    str(
+                        output_path
+                    )
+                )
+
+                rendered_pages.append(
+                    output_path
+                )
+
+        finally:
+            document.close()
+
+        return rendered_pages
+
+    raise ValueError(
+        f"Unsupported receipt image type: "
+        f"{source_path.name}"
+    )
+
+
+def make_receipt_upload_image(
+    receipt,
+    item_number,
+    render_folder
+):
+    image_paths = prepare_receipt_images(
+        receipt[
+            "source_file"
+        ],
+        render_folder
+    )
+
+    opened = [
+        PILImage.open(
+            path
+        ).convert(
+            "RGB"
+        )
+        for path in image_paths
+    ]
+
+    target_width = max(
+        image.width
+        for image in opened
+    )
+
+    resized = []
+
+    for image in opened:
+        if image.width != target_width:
+            image = image.resize(
+                (
+                    target_width,
+                    max(
+                        1,
+                        round(
+                            image.height
+                            * target_width
+                            / image.width
+                        )
+                    ),
+                ),
+                PILImage.Resampling.LANCZOS
+            )
+
+        resized.append(
+            image
         )
 
+    gap = max(
+        6,
+        target_width // 100
+    )
 
-        print(
-            f"    Category : "
-            f"{category}"
+    combined = PILImage.new(
+        "RGB",
+        (
+            target_width,
+            sum(
+                image.height
+                for image in resized
+            )
+            + gap
+            * max(
+                0,
+                len(
+                    resized
+                )
+                - 1
+            ),
+        ),
+        "white"
+    )
+
+    y = 0
+
+    for image in resized:
+        combined.paste(
+            image,
+            (
+                0,
+                y
+            )
         )
 
+        y += (
+            image.height
+            + gap
+        )
 
-# ======================================================================
-# VERIFY GENERATED WORKBOOK
-# ======================================================================
+    render_folder.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    output_path = (
+        render_folder
+        / f"item_{item_number:03d}.png"
+    )
+
+    combined.save(
+        output_path,
+        "PNG"
+    )
+
+    for image in opened:
+        image.close()
+
+    combined.close()
+
+    return output_path
+
+
+def column_width_pixels(
+    ws,
+    column
+):
+    return max(
+        1,
+        int(
+            (
+                ws.column_dimensions[
+                    column
+                ].width
+                or 8.43
+            )
+            * 7
+            + 5
+        )
+    )
+
+
+def pixel_anchor(
+    ws,
+    x_pixels,
+    row,
+    width_pixels,
+    height_pixels
+):
+    remaining = x_pixels
+    col_index = 0
+
+    for index, column in enumerate(
+        "ABCDEFGHI"
+    ):
+        pixels = column_width_pixels(
+            ws,
+            column
+        )
+
+        if remaining < pixels:
+            col_index = index
+            break
+
+        remaining -= pixels
+
+        col_index = min(
+            index + 1,
+            8
+        )
+
+    return OneCellAnchor(
+        _from=AnchorMarker(
+            col=col_index,
+            colOff=pixels_to_EMU(
+                max(
+                    0,
+                    int(
+                        remaining
+                    )
+                )
+            ),
+            row=row - 1,
+            rowOff=0
+        ),
+        ext=XDRPositiveSize2D(
+            pixels_to_EMU(
+                int(
+                    width_pixels
+                )
+            ),
+            pixels_to_EMU(
+                int(
+                    height_pixels
+                )
+            )
+        )
+    )
+
+
+def closest_column_to_x(
+    ws,
+    x
+):
+    running = 0
+    best_col = 1
+    best_distance = float(
+        "inf"
+    )
+
+    for index, column in enumerate(
+        "ABCDEFGHI",
+        start=1
+    ):
+        width = column_width_pixels(
+            ws,
+            column
+        )
+
+        center = (
+            running
+            + width / 2
+        )
+
+        distance = abs(
+            center
+            - x
+        )
+
+        if distance < best_distance:
+            best_distance = distance
+            best_col = index
+
+        running += width
+
+    return best_col
+
+
+def add_receipt_uploads_section(
+    ws,
+    extracted,
+    layout
+):
+    banner_row = (
+        layout[
+            "footer_first_row"
+        ]
+        + (
+            24
+            - FOOTER_FIRST_ROW
+        )
+    )
+
+    section_row = (
+        banner_row
+        + 1
+    )
+
+    ws.sheet_view.view = "pageBreakPreview"
+
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    ws.page_setup.orientation = "landscape"
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+
+    ws.page_setup.fitToWidth = 1
+
+    ws.page_setup.fitToHeight = 0
+
+    render_folder = (
+        BASE_DIR
+        / ".receipt_render_cache"
+    )
+
+    total_width = sum(
+        column_width_pixels(
+            ws,
+            c
+        )
+        for c in "ABCDEFGHI"
+    )
+
+    minimum_readable_width = 175
+    gutter = 12
+
+    columns_per_page = max(
+        1,
+        min(
+            4,
+            int(
+                (
+                    total_width
+                    + gutter
+                )
+                // (
+                    minimum_readable_width
+                    + gutter
+                )
+            )
+        )
+    )
+
+    slot_width = (
+        total_width
+        / columns_per_page
+    )
+
+    image_width = max(
+        minimum_readable_width,
+        int(
+            slot_width
+            - gutter
+        )
+    )
+
+    usable_page_height = 690
+
+    item_height = 42
+    vertical_gap = 10
+
+    receipt_data = []
+
+    for index, receipt in enumerate(
+        extracted,
+        start=1
+    ):
+        path = make_receipt_upload_image(
+            receipt,
+            index,
+            render_folder
+        )
+
+        with PILImage.open(
+            path
+        ) as probe:
+            natural_width, natural_height = probe.size
+
+        scale = min(
+            image_width
+            / natural_width,
+            1.0
+        )
+
+        rendered_width = max(
+            1,
+            int(
+                natural_width
+                * scale
+            )
+        )
+
+        rendered_height = max(
+            1,
+            int(
+                natural_height
+                * scale
+            )
+        )
+
+        receipt_data.append(
+            (
+                index,
+                receipt,
+                path,
+                rendered_width,
+                rendered_height,
+            )
+        )
+
+    pages = []
+    current_page = []
+    current_height = 0
+    current_row_group = []
+
+    for data in receipt_data:
+        current_row_group.append(
+            data
+        )
+
+        if len(
+            current_row_group
+        ) == columns_per_page:
+            required_height = (
+                item_height
+                + max(
+                    item[4]
+                    for item in current_row_group
+                )
+                + vertical_gap
+            )
+
+            if (
+                current_page
+                and current_height
+                + required_height
+                > usable_page_height
+            ):
+                pages.append(
+                    current_page
+                )
+
+                current_page = []
+                current_height = 0
+
+            current_page.append(
+                current_row_group
+            )
+
+            current_height += required_height
+
+            current_row_group = []
+
+    if current_row_group:
+        required_height = (
+            item_height
+            + max(
+                item[4]
+                for item in current_row_group
+            )
+            + vertical_gap
+        )
+
+        if (
+            current_page
+            and current_height
+            + required_height
+            > usable_page_height
+        ):
+            pages.append(
+                current_page
+            )
+
+            current_page = []
+            current_height = 0
+
+        current_page.append(
+            current_row_group
+        )
+
+        current_height += required_height
+
+    if current_page:
+        pages.append(
+            current_page
+        )
+
+    current_row = section_row
+    last_upload_row = banner_row
+
+    base_font = copy(
+        ws[
+            f"A{banner_row}"
+        ].font
+    )
+
+    base_font.sz = 14
+    base_font.bold = True
+
+    for page_index, page in enumerate(
+        pages
+    ):
+        if page_index > 0:
+            ws.row_breaks.append(
+                Break(
+                    id=current_row - 1
+                )
+            )
+
+        for row_group in page:
+            label_row = current_row
+
+            ws.row_dimensions[
+                label_row
+            ].height = 31.5
+
+            image_row = (
+                label_row
+                + 1
+            )
+
+            tallest = max(
+                item[4]
+                for item in row_group
+            )
+
+            image_rows = max(
+                1,
+                math.ceil(
+                    (
+                        tallest
+                        + vertical_gap
+                    )
+                    / 20
+                )
+            )
+
+            for row in range(
+                image_row,
+                image_row + image_rows
+            ):
+                ws.row_dimensions[
+                    row
+                ].height = 15
+
+            used_label_columns = set()
+
+            for slot, data in enumerate(
+                row_group
+            ):
+                (
+                    item_number,
+                    receipt,
+                    path,
+                    rendered_width,
+                    rendered_height,
+                ) = data
+
+                slot_left = (
+                    slot
+                    * slot_width
+                )
+
+                center_x = (
+                    slot_left
+                    + slot_width / 2
+                )
+
+                label_col = closest_column_to_x(
+                    ws,
+                    center_x
+                )
+
+                if label_col in used_label_columns:
+                    candidates = sorted(
+                        range(
+                            1,
+                            10
+                        ),
+                        key=lambda column:
+                        abs(
+                            column
+                            - label_col
+                        )
+                    )
+
+                    label_col = next(
+                        column
+                        for column in candidates
+                        if column not in used_label_columns
+                    )
+
+                used_label_columns.add(
+                    label_col
+                )
+
+                item_cell = ws.cell(
+                    label_row,
+                    label_col
+                )
+
+                item_cell.value = (
+                    f"Item {item_number}"
+                )
+
+                item_cell.font = copy(
+                    base_font
+                )
+
+                item_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center"
+                )
+
+                item_cell.border = Border(
+                    left=Side(
+                        style="thin"
+                    ),
+                    right=Side(
+                        style="thin"
+                    ),
+                    top=Side(
+                        style="thin"
+                    ),
+                    bottom=Side(
+                        style="thin"
+                    ),
+                )
+
+                image = XLImage(
+                    str(
+                        path
+                    )
+                )
+
+                scale = min(
+                    image_width
+                    / image.width,
+                    1.0
+                )
+
+                image.width = max(
+                    1,
+                    int(
+                        image.width
+                        * scale
+                    )
+                )
+
+                image.height = max(
+                    1,
+                    int(
+                        image.height
+                        * scale
+                    )
+                )
+
+                label_left = sum(
+                    column_width_pixels(
+                        ws,
+                        column
+                    )
+                    for column in "ABCDEFGHI"[
+                        :label_col - 1
+                    ]
+                )
+
+                label_center = (
+                    label_left
+                    + column_width_pixels(
+                        ws,
+                        "ABCDEFGHI"[
+                            label_col - 1
+                        ]
+                    )
+                    / 2
+                )
+
+                image_x = int(
+                    label_center
+                    - image.width / 2
+                )
+
+                image.anchor = pixel_anchor(
+                    ws,
+                    image_x,
+                    image_row,
+                    image.width,
+                    image.height
+                )
+
+                ws.add_image(
+                    image
+                )
+
+            current_row = (
+                image_row
+                + image_rows
+            )
+
+        last_upload_row = (
+            current_row
+            - 1
+        )
+
+    ws.print_area = (
+        f"A1:I{last_upload_row}"
+    )
+
+    print(
+        f"\nReceipt Uploads banner row: "
+        f"{banner_row}"
+    )
+
+    print(
+        f"Receipt images begin at row: "
+        f"{section_row}"
+    )
+
+    print(
+        f"Receipt Uploads ends at row: "
+        f"{last_upload_row}"
+    )
+
+    print(
+        f"Receipt images placed: "
+        f"{len(receipt_data)}"
+    )
+
+    print(
+        f"Receipt upload pages created: "
+        f"{len(pages)}"
+    )
+
+    print(
+        "The page break already present "
+        "in the master workbook was preserved."
+    )
+
+    print(
+        "Automatic page breaks are added "
+        "only after a receipt-upload page "
+        "has been filled."
+    )
+
+    return {
+        "receipt_uploads_banner_row": banner_row,
+        "receipt_uploads_first_row": section_row,
+        "receipt_uploads_last_row": last_upload_row,
+        "receipt_render_folder": render_folder,
+    }
+
 
 def verify_generated_workbook():
-
-    """
-    Immediately reopen the generated workbook after saving.
-
-    This catches structural problems before the user opens it
-    in Excel.
-    """
-
     try:
-
         verification_wb = load_workbook(
             OUTPUT_FILE,
             data_only=False
         )
 
-
         if SHEET_NAME not in verification_wb.sheetnames:
-
             raise RuntimeError(
                 "Form worksheet missing."
             )
-
 
         verification_ws = verification_wb[
             SHEET_NAME
         ]
 
-
-        # Force workbook structures to be accessed.
-
         _ = list(
             verification_ws.merged_cells.ranges
         )
-
 
         _ = list(
             verification_ws.data_validations.dataValidation
         )
 
-
         _ = verification_ws.max_row
-
 
         verification_wb.close()
 
-
     except Exception as error:
-
         raise SystemExit(
             "\nERROR: Generated workbook failed "
             "the integrity check.\n\n"
@@ -2469,92 +2288,61 @@ def verify_generated_workbook():
         )
 
 
-# ======================================================================
-# PROCESS RECEIPTS
-# ======================================================================
-
 def process_receipts():
-
     check_master_file()
 
     check_receipts_folder()
 
+    receipt_files = get_receipt_files()
 
-    receipt_files = (
-        get_receipt_files()
+    extracted = extract_receipts(
+        receipt_files
     )
 
-
-    # ==============================================================
-    # OCR FIRST
-    # ==============================================================
-
-    extracted = (
-        extract_receipts(
-            receipt_files
+    if len(extracted) != len(receipt_files):
+        raise SystemExit(
+            f"\nERROR: Found "
+            f"{len(receipt_files)} receipt files "
+            f"but only extracted "
+            f"{len(extracted)}."
         )
+
+    extracted = sort_receipts_chronologically(
+        extracted
     )
-
-
-    # ==============================================================
-    # ALWAYS START FROM EXACT MASTER
-    # ==============================================================
 
     try:
-
         shutil.copy2(
             MASTER_FILE,
             OUTPUT_FILE
         )
 
-
     except PermissionError:
-
         raise SystemExit(
             "\nERROR: Expense_Claim_filled.xlsx "
             "is currently open in Excel.\n\n"
             "Close it completely and run again."
         )
 
-
-    # ==============================================================
-    # LOAD FRESH WORKING COPY
-    # ==============================================================
-
     wb = load_workbook(
         OUTPUT_FILE
     )
 
-
     if SHEET_NAME not in wb.sheetnames:
-
         raise SystemExit(
             f"\nERROR: Worksheet "
             f"'{SHEET_NAME}' was not found."
         )
 
-
     ws = wb[
         SHEET_NAME
     ]
 
-
-    # ==============================================================
-    # DYNAMICALLY BUILD FORM
-    # ==============================================================
-
-    layout = (
-        build_dynamic_form(
-            wb,
-            ws,
-            extracted
-        )
+    layout = build_dynamic_form(
+        wb,
+        ws,
+        extracted
     )
-
-
-    # ==============================================================
-    # WRITE RECEIPTS
-    # ==============================================================
 
     write_receipts(
         ws,
@@ -2562,79 +2350,75 @@ def process_receipts():
         layout
     )
 
-
-    # ==============================================================
-    # RECALCULATE FORMULAS WHEN EXCEL OPENS
-    # ==============================================================
+    upload_layout = add_receipt_uploads_section(
+        ws,
+        extracted,
+        layout
+    )
 
     try:
-
         wb.calculation.fullCalcOnLoad = True
-
         wb.calculation.forceFullCalc = True
-
         wb.calculation.calcMode = "auto"
 
-
     except Exception:
-
         pass
 
-
-    # ==============================================================
-    # SAVE
-    # ==============================================================
-
     try:
-
         wb.save(
             OUTPUT_FILE
         )
 
-
         wb.close()
 
-
     except PermissionError:
-
         raise SystemExit(
             "\nERROR: Expense_Claim_filled.xlsx "
             "is currently open in Excel.\n\n"
             "Close it completely and run again."
         )
 
-
-    # ==============================================================
-    # VERIFY
-    # ==============================================================
-
     verify_generated_workbook()
 
+    render_folder = upload_layout.get(
+        "receipt_render_folder"
+    )
 
-    # ==============================================================
-    # FINISHED
-    # ==============================================================
+    if (
+        render_folder
+        and render_folder.exists()
+    ):
+        shutil.rmtree(
+            render_folder,
+            ignore_errors=True
+        )
 
     print(
         "\n========================================"
     )
 
-
     print(
         "EXPENSE CLAIM CREATED"
     )
-
 
     print(
         "========================================"
     )
 
+    print(
+        f"\nReceipt files found: "
+        f"{len(receipt_files)}"
+    )
 
     print(
-        f"\nReceipts processed: "
+        f"Receipts successfully processed: "
         f"{layout['receipt_count']}"
     )
 
+    print(
+        f"Receipt images inserted: "
+        f"{len(extracted)}"
+    )
 
     print(
         f"Receipt rows: "
@@ -2643,12 +2427,10 @@ def process_receipts():
         f"{layout['last_receipt_row']}"
     )
 
-
     print(
         f"Unique categories: "
         f"{layout['unique_category_count']}"
     )
-
 
     print(
         f"Category rows: "
@@ -2657,49 +2439,31 @@ def process_receipts():
         f"{layout['last_category_row']}"
     )
 
-
     print(
         f"Grand Total row: "
         f"{layout['grand_total_row']}"
     )
 
-
     print(
-        f"Footer begins at row: "
-        f"{layout['footer_first_row']}"
+        "\nAll receipts were successfully "
+        "included."
     )
 
-
     print(
-        "\nAdditional Context (E:F) "
-        "was left completely blank."
+        "Receipts were ordered "
+        "chronologically."
     )
 
-
     print(
-        "Column widths were preserved."
+        "The master workbook page break "
+        "was preserved."
     )
 
-
     print(
-        "Image size/location was preserved."
+        "Automatic page breaks occur only "
+        "inside the receipt-image section "
+        "after a page has been filled."
     )
-
-
-    print(
-        "Footer formatting was preserved."
-    )
-
-
-    print(
-        "Summary formulas were rebuilt."
-    )
-
-
-    print(
-        "Category dropdowns were extended."
-    )
-
 
     print(
         "\nOpen Expense_Claim_filled.xlsx "
@@ -2707,232 +2471,94 @@ def process_receipts():
         "before printing/submitting."
     )
 
-
     print(
         "========================================\n"
     )
 
 
-# ======================================================================
-# RESET
-# ======================================================================
-
 def reset_expense_claim():
-
-    """
-    RESET IS DELIBERATELY SIMPLE.
-
-    It does not try to delete individual dynamic rows.
-
-    Instead:
-
-        Expense_Claim_MASTER.xlsx
-
-    is copied directly over:
-
-        Expense_Claim_filled.xlsx
-
-    Therefore reset ALWAYS restores the exact master:
-        - exact columns
-        - exact rows
-        - exact borders
-        - exact merges
-        - exact formulas
-        - exact image
-        - exact row heights
-        - exactly one receipt row
-        - exactly one category row
-    """
-
     check_master_file()
 
-
     try:
-
         shutil.copy2(
             MASTER_FILE,
             OUTPUT_FILE
         )
 
-
     except PermissionError:
-
         raise SystemExit(
             "\nERROR: Expense_Claim_filled.xlsx "
             "is currently open in Excel.\n\n"
-            "Close Excel completely and run Reset again."
+            "Close Excel completely "
+            "and run Reset again."
         )
-
 
     print(
         "\n========================================"
     )
 
-
     print(
         "EXPENSE CLAIM RESET"
     )
 
-
     print(
         "========================================"
     )
-
 
     print(
         "\nThe exact master workbook "
         "has been restored."
     )
 
-
-    print(
-        "\nThe working file is now back to:"
-    )
-
-
-    print(
-        "• 1 blank receipt row"
-    )
-
-
-    print(
-        "• 1 blank category row"
-    )
-
-
-    print(
-        "• Original Grand Total"
-    )
-
-
-    print(
-        "• Original signature section"
-    )
-
-
-    print(
-        "• Original Notes"
-    )
-
-
-    print(
-        "• Original borders and merges"
-    )
-
-
-    print(
-        "• Original row heights"
-    )
-
-
-    print(
-        "• Original column widths"
-    )
-
-
-    print(
-        "• Original image"
-    )
-
-
-    print(
-        "\nReady for the next claim."
-    )
-
-
     print(
         "========================================\n"
     )
 
 
-# ======================================================================
-# MAIN MENU
-# ======================================================================
-
 def main_menu():
-
     print(
         "\n========================================"
     )
-
 
     print(
         "        EXPENSE CLAIM TOOL"
     )
 
-
     print(
         "========================================"
     )
-
 
     print(
         "\n1 - Process receipts"
     )
 
-
     print(
         "2 - Reset expense claim"
     )
-
 
     print(
         "3 - Exit"
     )
 
-
     choice = input(
         "\nChoose 1, 2 or 3: "
     ).strip()
 
-
-    # ==============================================================
-    # PROCESS
-    # ==============================================================
-
     if choice == "1":
-
         process_receipts()
 
-
-    # ==============================================================
-    # RESET
-    # ==============================================================
-
     elif choice == "2":
-
         reset_expense_claim()
 
-
-        print(
-            "IMPORTANT: Remove or replace "
-            "the previous receipt files "
-            "inside the receipts folder "
-            "before processing a new claim.\n"
-        )
-
-
-    # ==============================================================
-    # EXIT
-    # ==============================================================
-
     elif choice == "3":
-
         print(
             "\nExited Expense Claim Tool.\n"
         )
 
-
-    # ==============================================================
-    # INVALID
-    # ==============================================================
-
     else:
-
         print(
             "\nInvalid selection."
         )
-
 
         print(
             "Run python llamacode.py again "
@@ -2940,10 +2566,5 @@ def main_menu():
         )
 
 
-# ======================================================================
-# RUN PROGRAM
-# ======================================================================
-
 if __name__ == "__main__":
-
     main_menu()
