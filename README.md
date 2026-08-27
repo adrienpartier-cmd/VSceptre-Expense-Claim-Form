@@ -57,6 +57,3 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
    pip install pyinstaller
    pyinstaller -Fn ExpenseClaimForm llamacode.py
    ```
-## Legal notices
-
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for included library licenses and source links.
