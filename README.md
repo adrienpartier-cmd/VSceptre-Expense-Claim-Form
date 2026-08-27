@@ -54,5 +54,3 @@ not completed
    pip install pyinstaller
    pyinstaller -Fn ExpenseClaimForm llamacode.py
    ```
-
-**the above is not yet finalized please fix before present
