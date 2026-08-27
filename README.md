@@ -33,9 +33,9 @@ not completed
    source venv/bin.activate
    ```
    
-   > [!NOTE]
-   > 
-   > We tested on Python 3.14, older versions may or may not work.
+> [!NOTE]
+> 
+> We tested on Python 3.14, older versions may or may not work.
 
 3. Install the required packages
    ```
