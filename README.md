@@ -27,30 +27,31 @@ not completed
 
    Windows:
    ```
-   python3.14 -m venv venv
+   python3 -m venv venv
    .\venv\Scripts\activate
    ```
 
    MacOS/Linux:
    ```
-   python3.14 -m venv venv
+   python3 -m venv venv
    source venv/bin.activate
    ```
    
 > [!NOTE]
 > 
-> We tested on Python 3.14, older versions may or may not work.
+> We tested on Python 3.14 and 3.13, older versions may or may not work.
 
 3. Install the required packages
    ```
-   pip install requirements.txt
+   pip install -r requirements.txt
    ```
 4. Run program
    ```
-   python3.14 llamacode.py
+   python3 llamacode.py
    ```
 5. Optional: package for distribution using pyinstaller
    ```
+   pip install pyinstaller
    pyinstaller -Fn ExpenseClaimForm llamacode.py
    ```
 
