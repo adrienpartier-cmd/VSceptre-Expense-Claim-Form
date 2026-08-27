@@ -13,7 +13,7 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 
 2. Extract the file. A new folder named `ExpenseClaimForm-[OS_TYPE]` should appear.
 
-3. Open that folder and double-click the executable named `ExpenseClaimForm`. Depending on your operating system, it may have a different file extension.
+3. Open that folder and double-click the executable named `ExpenseClaimForm`. Depending on your operating system, it may have a different file extension. It may take a while to open, I am not sure why, but there is no delay when using Python natively, see below.
 
 > [!IMPORTANT]
 > Windows Defender or another antivirus program may mark this application as suspicious or malicious. This is because the application is packaged with PyInstaller, which is also commonly used to package malware. Please be assured that we are not trying to hack you. If necessary, configure your antivirus program to allow the application.
