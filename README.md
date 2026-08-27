@@ -12,6 +12,9 @@ foo bar
 
 not completed
 
+> [!IMPORTANT]
+> Windows Defender or whatever antivirus you use will probably mark this as suspicious/malware. This is because the way we used to package the application (pyinstaller) is also commonly used to package malicious programs. Please be assured that we are not interested in hacking anyone. Just tell Windows Defender to ignore it.
+
 ### For advanced users: Run with Python
 
 1. Git clone our repo
@@ -20,7 +23,7 @@ not completed
    cd VSceptre-Expense-Claim-Form
    ```
 
-2. Make a virtual environment
+2. Make a virtual environment. This step is technically optional, but it avoids causing conflicts with other packages that you may install/have installed for other purposes, so it is strongly recommended.
 
    Windows:
    ```
@@ -48,5 +51,7 @@ not completed
    ```
 5. Optional: package for distribution using pyinstaller
    ```
-   WIP
+   pyinstaller -Fn ExpenseClaimForm llamacode.py
    ```
+
+**the above is not yet finalized please fix before present
