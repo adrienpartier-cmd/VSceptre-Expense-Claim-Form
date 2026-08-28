@@ -7,7 +7,7 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 ### For regular users: Download release
 
 > [!NOTE]
-> Please find myself and Merton for tech support or any further enquires. Otherwise, you are welcome to fix / alter the code locally yourself.
+> Please find Adrien or Merton for tech support or any further enquires. Otherwise, you are welcome to fix / alter the code locally yourself.
 
 1. Download the corresponding ZIP file from the releases page. Depending on your operating system, you will need to download a different file.
 
@@ -17,6 +17,8 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
 
 > [!IMPORTANT]
 > Windows Defender or another antivirus program may mark this application as suspicious or malicious. This is because the application is packaged with PyInstaller, which is also commonly used to package malware. Please be assured that we are not trying to hack you. If necessary, configure your antivirus program to allow the application.
+>
+> Also, you will need an API key to access the AI service. I will ask the IT people to make one and distribute it to everyone. You just need to put the API_KEY.txt next to the executable in the folder.
 
 ### For advanced users: Run with Python
 
@@ -41,14 +43,13 @@ Scan receipts and turn them into expense claim forms. Powered by LlamaParse.
    ```
 
 > [!NOTE]
-> 
 > We tested on Python 3.14 and 3.13, older versions may or may not work.
 
 3. Install the required packages:
    ```
    pip install -r requirements.txt
    ```
-4. Run the program:
+4. Run the program (ensure that you have an API key, see above):
    ```
    python llamacode.py
    ```
